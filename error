@@ -1,0 +1,147 @@
+#!/data/data/com.termux/files/usr/bin/python3
+# -*- coding: utf-8 -*-
+import os, sys, subprocess, re
+from pathlib import Path
+
+class TermuxBinaryBuilder:
+    def __init__(self):
+        self.name = ""
+        self.binary_path = ""
+        self.temp_files = []
+        self.dummy_file = "dummy.dat"
+        self.auto_hidden_imports = [
+            'json', 'os', 'sys', 'time', 'base64', 'marshal', 'zlib',
+            'random', 'getpass', 're', 'builtins',
+            'Crypto', 'Crypto.Cipher', 'Crypto.Cipher.AES', 'Crypto.Util.Padding',
+            'telegram', 'telegram.ext', 'telegram.ext.filters',
+            'telegram.ext.commandhandler', 'telegram.utils', 'telegram.constants',
+            'telegram.vendor.ptb_urllib3.urllib3',
+            'telegram.vendor.ptb_urllib3.urllib3.packages.six',
+            'telegram.vendor.ptb_urllib3.urllib3.packages.six.moves',
+            'telegram.vendor.ptb_urllib3.urllib3.contrib',
+            'telegram.vendor.ptb_urllib3.urllib3.contrib.appengine',
+        ]
+
+    def run(self, cmd, silent=False):
+        try:
+            result = subprocess.run(cmd, shell=True, check=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return result.stdout.decode()
+        except subprocess.CalledProcessError as e:
+            if not silent:
+                print(f"\033[91m[!] Error: {e.stderr.decode().strip()}\033[0m")
+            return None
+
+    def install_dependencies(self):
+        print("\033[96m[•] Installing pycryptodome + telegram bot...\033[0m")
+        subprocess.run("pip uninstall -y pycrypto Crypto telegram python-telegram-bot", shell=True)
+        subprocess.run("pip install --no-binary :all: pycryptodome", shell=True)
+        subprocess.run("pip install python-telegram-bot==13.15", shell=True)
+        subprocess.run("pip install pyinstaller", shell=True)
+        subprocess.run("pkg install -y termux-elf-cleaner clang", shell=True)
+
+    def clean_build_folders(self):
+        for folder in ["build", "dist", "__pycache__"]:
+            if os.path.exists(folder):
+                subprocess.run(f"rm -rf {folder}", shell=True)
+
+    def create_dummy_file(self, size_mb=10):
+        print(f"\033[96m[•] Creating {size_mb}MB dummy file...\033[0m")
+        self.run(f"dd if=/dev/urandom of={self.dummy_file} bs=1M count={size_mb}")
+        self.temp_files.append(self.dummy_file)
+
+    def patch_spec_file(self, spec_file):
+        vendor_path = "/data/data/com.termux/files/usr/lib/python3.12/site-packages/telegram/vendor/ptb_urllib3/urllib3"
+
+        with open(spec_file, "r") as f:
+            content = f.read()
+
+        # Insert dummy file
+        if "datas=[" in content:
+            content = content.replace("datas=[", f"datas=[('{self.dummy_file}', '.'), ")
+        else:
+            content = content.replace("Analysis(", f"Analysis(\n    datas=[('{self.dummy_file}', '.')],\n")
+
+        # Add vendor path
+        vendor_data = f"('{vendor_path}', 'telegram/vendor/ptb_urllib3/urllib3')"
+        if vendor_data not in content:
+            content = re.sub(r"datas=\[", f"datas=[{vendor_data}, ", content)
+
+        # Add all hidden imports
+        imports_line = ", ".join([f"'{i}'" for i in self.auto_hidden_imports])
+        content = re.sub(r"hiddenimports=\[.*?\]", f"hiddenimports=[{imports_line}]", content, flags=re.S)
+
+        with open(spec_file, "w") as f:
+            f.write(content)
+
+    def generate_spec_and_build(self, input_file):
+        self.name = Path(input_file).stem
+        print("\033[96m[•] Step 1: Cleaning previous builds...\033[0m")
+        self.clean_build_folders()
+
+        print("\033[96m[•] Step 2: Creating .spec file...\033[0m")
+        self.run(f"pyi-makespec --onefile {input_file}")
+
+        spec_file = f"{self.name}.spec"
+        if not os.path.exists(spec_file):
+            print("\033[91m[!] .spec generation failed.\033[0m")
+            sys.exit(1)
+
+        print("\033[96m[•] Injecting dummy, hidden imports & vendor fix...\033[0m")
+        self.patch_spec_file(spec_file)
+
+        print("\033[96m[•] Step 3: Building binary with PyInstaller...\033[0m")
+        self.run(f"pyinstaller --clean {spec_file}")
+
+        self.binary_path = f"dist/{self.name}"
+        if not os.path.exists(self.binary_path):
+            print("\033[91m[!] Build failed! Binary not found.\033[0m")
+            sys.exit(1)
+
+    def fix_elf_headers(self):
+        print("\033[96m[•] Fixing ELF headers...\033[0m")
+        self.run(f"termux-elf-cleaner {self.binary_path}")
+
+    def extract_strings(self):
+        print("\033[96m[•] Extracting strings...\033[0m")
+        result = self.run(f"strings {self.binary_path}")
+        if result:
+            with open("strings.txt", "w") as f:
+                f.write(result)
+            self.temp_files.append("strings.txt")
+
+    def cleanup(self):
+        print("\033[90m[~] Cleaning temporary files...\033[0m")
+        for file in self.temp_files + ["build", "__pycache__", f"{self.name}.spec"]:
+            if os.path.isfile(file):
+                os.remove(file)
+            elif os.path.isdir(file):
+                subprocess.run(f"rm -rf {file}", shell=True)
+
+    def finish(self):
+        size_kb = Path(self.binary_path).stat().st_size // 10
+        print(f"""\n\033[92m[✓] Obfuscation & Build Complete!\033[0m
+    ➤ Binary   : {self.binary_path}
+    ➤ Strings  : strings.txt
+    ➤ Dummy    : {self.dummy_file}
+    ➤ Size     : {size_kb} KB""")
+
+    def main(self, input_file):
+        if not os.path.exists(input_file):
+            print(f"\033[91m[!] File not found: {input_file}\033[0m")
+            sys.exit(1)
+
+        self.install_dependencies()
+        self.create_dummy_file(size_mb=10)
+        self.generate_spec_and_build(input_file)
+        self.fix_elf_headers()
+        self.extract_strings()
+        self.finish()
+        self.cleanup()
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("\033[96mUsage: python obf_telegram_builder_final.py <your_script.py>\033[0m")
+        sys.exit(1)
+    builder = TermuxBinaryBuilder()
+    builder.main(sys.argv[1])
