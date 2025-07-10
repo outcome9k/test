@@ -1,0 +1,103 @@
+#!/data/data/com.termux/files/usr/bin/python3
+#MAKE BY OUTCOME9K/9K
+#TELAGRAM OUTCOME9K
+import os
+import sys
+import subprocess
+from pathlib import Path
+
+class TermuxObfuscator:
+    def __init__(self):
+        self.required_tools = ['upx', 'python3', 'clang', 'patchelf']
+        self.temp_files = []
+
+    def check_deps(self):
+        print("\033[1;34m[+] Checking dependencies...\033[0m")
+        for tool in self.required_tools:
+            if not self.run_cmd(f"command -v {tool}", silent=True):
+                print(f"\033[1;33m[!] Installing {tool}...\033[0m")
+                subprocess.run(f"pkg install -y {tool}", shell=True)
+
+        subprocess.run("pip install --upgrade pip", shell=True)
+        subprocess.run("pip install pyinstaller", shell=True)
+
+    def run_cmd(self, cmd, silent=False):
+        try:
+            result = subprocess.run(cmd, shell=True, check=True,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+            return result.stdout.decode()
+        except subprocess.CalledProcessError as e:
+            if not silent:
+                print(f"\033[1;31m[!] Error: {e.stderr.decode().strip()}\033[0m")
+            return None
+
+    def compile_python(self, input_file):
+        print("\033[1;34m[•] Compiling Python to standalone binary with PyInstaller...\033[0m")
+        self.run_cmd(f"pyinstaller --onefile {input_file}")
+        return f"dist/{Path(input_file).stem}"
+
+    def upx_obfuscate(self, binary_path):
+        print("\033[1;34m[1/3] UPX Compressing...\033[0m")
+        self.run_cmd(f"upx --best --lzma {binary_path}")
+
+    def string_obfuscate(self, binary_path):
+        print("\033[1;34m[2/3] Extracting Strings...\033[0m")
+        if os.path.exists(binary_path):
+            strings = self.run_cmd(f"strings {binary_path}")
+            if strings:
+                with open("strings.txt", "w") as f:
+                    f.write(strings)
+                self.temp_files.append("strings.txt")
+
+    def add_anti_debug(self):
+        print("\033[1;34m[3/3] Creating Anti-Debug Library...\033[0m")
+        c_code = """#include <unistd.h>
+#include <stdio.h>
+#include <sys/ptrace.h>
+void anti_debug() {
+    if (ptrace(PTRACE_TRACEME, 0, 1, 0) == -1) {
+        printf("Debugger detected!\\n");
+        _exit(1);
+    }
+}"""
+        with open("anti_debug.c", "w") as f:
+            f.write(c_code)
+
+        self.run_cmd("clang -shared -fPIC -o libantidebug.so anti_debug.c")
+        if os.path.exists("libantidebug.so"):
+            self.temp_files.extend(["anti_debug.c", "libantidebug.so"])
+            print("\033[1;33m[!] To run the binary with anti-debug:\033[0m")
+            print("\033[1;36m    LD_PRELOAD=./libantidebug.so ./obf_<name>\033[0m")
+
+    def cleanup(self):
+        print("\033[1;34m[~] Cleaning temporary files...\033[0m")
+        for file in self.temp_files:
+            if os.path.exists(file):
+                os.remove(file)
+        os.system("rm -rf build __pycache__ *.spec")
+
+    def main(self):
+        if len(sys.argv) < 2:
+            print("\033[1;36mUsage: ./termux_obfuscator.py <input.py>\033[0m")
+            sys.exit(1)
+
+        input_file = sys.argv[1]
+        output_bin = f"dist/{Path(input_file).stem}"
+
+        self.check_deps()
+        binary_path = self.compile_python(input_file)
+        self.upx_obfuscate(binary_path)
+        self.string_obfuscate(binary_path)
+        self.add_anti_debug()
+
+        print(f"\n\033[1;32m[✓] Obfuscation Complete!\033[0m")
+        print(f"\033[1;32m    ➤ Binary   : {binary_path}")
+        print(f"\033[1;32m    ➤ Strings  : strings.txt (optional)")
+        print(f"\033[1;32m    ➤ Anti-Debug lib: libantidebug.so\033[0m")
+
+        self.cleanup()
+
+if __name__ == "__main__":
+    ob = TermuxObfuscator()
+    ob.main()
