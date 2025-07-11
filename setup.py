@@ -11,7 +11,7 @@ setup(
     python_requires='>=3.6',
     entry_points={
         'console_scripts': [
-            'toolmenu = test.main:main',  # <command> = <module>:<function>
+            'outcomemenu = test.main:main',  # <command> = <module>:<function>
         ]
     },
 )
