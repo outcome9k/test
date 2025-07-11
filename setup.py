@@ -1,5 +1,5 @@
 from setuptools import setup, find_packages
-
+from test.main import main
 setup(
     name='test',
     version='0.1.0',
@@ -11,7 +11,7 @@ setup(
     python_requires='>=3.6',
     entry_points={
         'console_scripts': [
-            'outcomemenu = test.main:main',  # <command> = <module>:<function>
+            'toolmenu = test.main:main',  # <command> = <module>:<function>
         ]
     },
 )
