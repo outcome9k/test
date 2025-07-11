@@ -1,5 +1,5 @@
 def run_menu():
-    print("Welcome to the TOOL MENU!")
+    print("Welcome to the OUTCOME9K MENU!")
     print("1. Black2")
     print("2. Kramer")
     print("3. Exit")
