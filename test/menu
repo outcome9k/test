@@ -4,17 +4,20 @@ def run_menu():
         print("1. Black2")
         print("2. Fix")
         print("3. Emo")
-        print("4. Exit")
+        print("4. Kramer")
+        print("5. Exit")
 
         choice = input("Choose option: ")
         if choice == '1':
-            print("Running Black2...")
+            print("🔧 Running Black2...")
         elif choice == '2':
-            print("Running Fix...")
+            print("🛠 Running Fix...")
         elif choice == '3':
-            print("Running Emo...")
+            print("🎭 Running Emo...")
         elif choice == '4':
-            print("Bye!")
+            print("💥 Running Kramer...")
+        elif choice == '5':
+            print("👋 Bye!")
             break
         else:
-            print("Invalid option. Try again.")
+            print("❌ Invalid option. Try again.")
