@@ -1,17 +1,14 @@
 def run_menu():
-    print("Welcome to the OUTCOME9K MENU!")
+    print("== Tool Menu ==")
     print("1. Black2")
-    print("2. Kramer")
-    print("3. Exit")
+    print("2. Exit")
 
     while True:
-        choice = input("Choose: ")
+        choice = input("Choose option: ")
         if choice == '1':
             print("Running Black2...")
         elif choice == '2':
-            print("Running Kramer...")
-        elif choice == '3':
             print("Bye!")
             break
         else:
-            print("Invalid!")
+            print("Invalid")
